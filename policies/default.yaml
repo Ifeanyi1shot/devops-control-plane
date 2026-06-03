@@ -1,0 +1,69 @@
+version: "1.0"
+rules:
+  # Block ALL actions in production on weekends + after 6pm Friday
+  - name: production-weekend-freeze
+    description: No production changes on weekends or Friday evenings
+    match:
+      actionType: "*"
+      environment: production
+    allow: false
+    timeRestriction:
+      denyDays: [Saturday, Sunday]
+      denyAfterHour: 18  # 6pm Friday onwards handled by denyDays Saturday
+
+  # Production rollbacks require senior-engineer approval
+  - name: production-rollback-requires-approval
+    description: Rollbacks to production need a second pair of eyes
+    match:
+      actionType: rollback
+      environment: production
+      role: [engineer, developer]
+    allow: true
+    requireApproval: true
+    approverRole: senior-engineer
+
+  # Senior engineers can rollback production without additional approval
+  - name: senior-production-rollback
+    description: Senior engineers can self-approve production rollbacks
+    match:
+      actionType: rollback
+      environment: production
+      role: senior-engineer
+    allow: true
+    requireApproval: false
+
+  # Anyone can rollback staging without approval
+  - name: staging-rollback-open
+    description: Staging rollbacks are self-service
+    match:
+      actionType: rollback
+      environment: [staging, preview, development]
+    allow: true
+    requireApproval: false
+
+  # Preview environments are always self-service
+  - name: preview-env-open
+    description: Preview environments are self-service for all roles
+    match:
+      actionType: preview_env
+    allow: true
+    requireApproval: false
+
+  # Restarts in non-production are self-service
+  - name: non-prod-restart
+    description: Service restarts in non-production environments
+    match:
+      actionType: restart
+      environment: [staging, preview, development]
+    allow: true
+    requireApproval: false
+
+  # Production restarts require approval
+  - name: production-restart-approval
+    description: Production restarts require senior-engineer sign-off
+    match:
+      actionType: restart
+      environment: production
+    allow: true
+    requireApproval: true
+    approverRole: senior-engineer
