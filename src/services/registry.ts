@@ -1,8 +1,19 @@
 import type { Service } from '../types/index';
 
-// In MVP, services are registered here as config.
-// Phase 2 replaces this with auto-discovery from GitHub + Kubernetes labels.
 const registry = new Map<string, Service>([
+  [
+    'devops-control-plane',
+    {
+      id: 'devops-control-plane',
+      name: 'DevOps Control Plane',
+      repo: 'Ifeanyi1shot/devops-control-plane',
+      namespace: 'production',
+      deployment: 'devops-control-plane',
+      owner: 'Ifeanyi1shot',
+      runbookUrl: 'https://github.com/Ifeanyi1shot/devops-control-plane/blob/main/README.md',
+      tags: { team: 'platform', tier: 'critical' },
+    },
+  ],
   [
     'payments-service',
     {
@@ -28,18 +39,6 @@ const registry = new Map<string, Service>([
       owner: 'platform-team',
       runbookUrl: 'https://wiki.internal/runbooks/api-gateway',
       tags: { team: 'platform', tier: 'critical' },
-    },
-  ],
-  [
-    'user-service',
-    {
-      id: 'user-service',
-      name: 'User Service',
-      repo: 'your-org/user-service',
-      namespace: 'production',
-      deployment: 'user-service',
-      owner: 'identity-team',
-      tags: { team: 'identity', tier: 'high' },
     },
   ],
 ]);
