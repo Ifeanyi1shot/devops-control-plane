@@ -11,12 +11,33 @@ function matchesField(value: string, pattern: string | string[] | undefined): bo
   return patterns.some((p) => p === '*' || p.toLowerCase() === value.toLowerCase());
 }
 
+function getLocalDayAndHour(): { dayName: string; hour: number } {
+  const tz = process.env['POLICY_TIMEZONE'];
+  const now = new Date();
+
+  if (tz) {
+    // Use the configured timezone (e.g. "Africa/Lagos", "America/New_York")
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      weekday: 'long',
+      hour: 'numeric',
+      hour12: false,
+    }).formatToParts(now);
+
+    const dayName = parts.find((p) => p.type === 'weekday')?.value ?? DAYS[now.getDay()] ?? 'Sunday';
+    const hourStr = parts.find((p) => p.type === 'hour')?.value ?? String(now.getHours());
+    const hour = parseInt(hourStr, 10) % 24; // "24" is returned for midnight in some locales
+    return { dayName, hour };
+  }
+
+  // Fall back to server local time
+  return { dayName: DAYS[now.getDay()] ?? 'Sunday', hour: now.getHours() };
+}
+
 function checkTimeRestriction(rule: PolicyRule): { denied: boolean; reason: string } {
   if (!rule.timeRestriction) return { denied: false, reason: '' };
 
-  const now = new Date();
-  const dayName = DAYS[now.getDay()] as string;
-  const hour = now.getHours();
+  const { dayName, hour } = getLocalDayAndHour();
 
   const { denyDays, denyAfterHour, denyBeforeHour } = rule.timeRestriction;
 

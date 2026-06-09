@@ -3,6 +3,7 @@ import path from 'path';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import staticFiles from '@fastify/static';
 
 import { createDatabase } from './db/index';
 import { PolicyEngine } from './core/policy/engine';
@@ -29,6 +30,7 @@ const POLICY_DIR = process.env['POLICY_DIR'] ?? path.join(process.cwd(), 'polici
 const SLACK_BOT_TOKEN = process.env['SLACK_BOT_TOKEN'] ?? '';
 const SLACK_SIGNING_SECRET = process.env['SLACK_SIGNING_SECRET'] ?? '';
 const SLACK_APPROVAL_CHANNEL = process.env['SLACK_APPROVAL_CHANNEL'] ?? '#platform-approvals';
+const IS_PROD = process.env['NODE_ENV'] === 'production';
 
 async function bootstrap() {
   // ── Database ──────────────────────────────────────────────────────────────
@@ -48,10 +50,18 @@ async function bootstrap() {
   // ── Fastify server ────────────────────────────────────────────────────────
   const app = Fastify({ logger: { level: process.env['LOG_LEVEL'] ?? 'info' } });
 
-  await app.register(helmet);
-  await app.register(cors, {
-    origin: process.env['CORS_ORIGIN'] ?? '*',
-  });
+  await app.register(helmet, { contentSecurityPolicy: false });
+  await app.register(cors, { origin: process.env['CORS_ORIGIN'] ?? '*' });
+
+  // In production, serve the compiled React app as static files
+  if (IS_PROD) {
+    const frontendDist = path.join(process.cwd(), 'frontend', 'dist');
+    await app.register(staticFiles, {
+      root: frontendDist,
+      prefix: '/',
+      wildcard: false,
+    });
+  }
 
   // Parse URL-encoded bodies (required for Slack interactive payloads)
   app.addContentTypeParser(
@@ -68,21 +78,36 @@ async function bootstrap() {
     }
   );
 
-  // Health check
+  // Health check (outside /api so load balancers can reach it)
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
-  // Routes
-  await servicesRoutes(app, github);
-  await rollbackRoutes(app, rollbackService, slack);
-  await actionsRoutes(app, orchestrator);
-  await auditRoutes(app, auditStore);
+  // Slack interactions webhook (outside /api — URL is set in Slack app settings)
   await slackRoutes(app, slack, orchestrator);
-  await previewEnvRoutes(app, previewEnvService);
+
+  // All API routes under /api prefix (matches frontend's BASE = '/api')
+  await app.register(async (api) => {
+    await servicesRoutes(api, github);
+    await rollbackRoutes(api, rollbackService, slack);
+    await actionsRoutes(api, orchestrator);
+    await auditRoutes(api, auditStore);
+    await previewEnvRoutes(api, previewEnvService);
+  }, { prefix: '/api' });
+
+  // SPA fallback — serve index.html for all unmatched routes in production
+  if (IS_PROD) {
+    app.setNotFoundHandler(async (req, reply) => {
+      if (req.url.startsWith('/api') || req.url.startsWith('/slack') || req.url.startsWith('/health')) {
+        return reply.code(404).send({ error: 'Not found' });
+      }
+      return reply.sendFile('index.html');
+    });
+  }
 
   // ── Start ─────────────────────────────────────────────────────────────────
   try {
     await app.listen({ port: PORT, host: HOST });
     console.log(`\n  DevOps Control Plane running at http://localhost:${PORT}`);
+    console.log(`  Mode: ${IS_PROD ? 'production' : 'development'}`);
     console.log(`  Policy directory: ${POLICY_DIR}`);
     if (slack.isConfigured()) {
       console.log(`  Slack notifications → ${SLACK_APPROVAL_CHANNEL}`);
