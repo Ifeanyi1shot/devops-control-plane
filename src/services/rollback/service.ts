@@ -2,7 +2,7 @@ import type { Action, ActionPreview, ActionRequest, PolicyDecision, Service } fr
 import { ActionOrchestrator } from '../../core/action/orchestrator';
 import { GitHubClient } from '../../integrations/github/client';
 import { KubernetesClient } from '../../integrations/kubernetes/client';
-import { auditStore } from '../../core/audit/store';
+import type { AuditStore } from '../../core/audit/store';
 
 export interface RollbackParams {
   targetDeploymentId: string;   // the deployment ID to roll back to
@@ -22,7 +22,8 @@ export class RollbackService {
     private orchestrator: ActionOrchestrator,
     private github: GitHubClient,
     private k8s: KubernetesClient,
-    private services: Map<string, Service>
+    private services: Map<string, Service>,
+    private auditStore: AuditStore,
   ) {}
 
   private getService(serviceId: string): Service {
@@ -38,7 +39,7 @@ export class RollbackService {
     const service = this.getService(request.serviceId);
 
     const buildDetail = async (
-      actionId: string,
+      _actionId: string,
       _decision: PolicyDecision
     ): Promise<Omit<ActionPreview, 'actionId' | 'requiresApproval' | 'policyName'>> => {
       // Fetch current deployment status from Kubernetes
@@ -57,7 +58,7 @@ export class RollbackService {
       let changedFiles: string[] = [];
       try {
         // We compare target (older) -> current (newer) to show what we're reverting
-        const diff = await this.github.getCommitDiff(service.repo, params.targetSha, 'HEAD');
+        const diff = await this.github.getCommitDiff(service.repo, params.targetSha, 'main');
         diffSummary = diff.summary;
         changedFiles = diff.files;
       } catch {
@@ -112,7 +113,7 @@ export class RollbackService {
       const params = action.params as unknown as RollbackParams;
       const service = this.getService(action.serviceId);
 
-      auditStore.log(actionId, 'rollback', service.id, 'system', 'rollback.k8s.patch.start', {
+      this.auditStore.log(actionId, 'rollback', service.id, 'system', 'rollback.k8s.patch.start', {
         image: params.targetImage,
         namespace: service.namespace,
         deployment: service.deployment,
@@ -125,7 +126,7 @@ export class RollbackService {
         params.targetImage
       );
 
-      auditStore.log(actionId, 'rollback', service.id, 'system', 'rollback.k8s.patch.complete', {
+      this.auditStore.log(actionId, 'rollback', service.id, 'system', 'rollback.k8s.patch.complete', {
         image: params.targetImage,
       });
 

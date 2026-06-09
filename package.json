@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
+    "dev:ui": "npm --prefix frontend run dev",
     "build": "tsc",
     "start": "node dist/index.js"
   },
@@ -17,6 +18,8 @@
     "@fastify/helmet": "^13.0.2",
     "@kubernetes/client-node": "^1.4.0",
     "@octokit/rest": "^22.0.1",
+    "@slack/web-api": "^7.16.0",
+    "better-sqlite3": "^12.10.0",
     "dotenv": "^17.4.2",
     "fastify": "^5.8.5",
     "js-yaml": "^4.1.1",
@@ -24,6 +27,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.9.1",
     "@types/uuid": "^10.0.0",

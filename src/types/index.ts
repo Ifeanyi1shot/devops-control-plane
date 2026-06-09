@@ -115,3 +115,22 @@ export interface PolicyDecision {
   matchedRule: string;
   reason: string;
 }
+
+export type PreviewStatus = 'creating' | 'running' | 'destroying' | 'destroyed' | 'failed';
+
+export interface PreviewEnvironment {
+  id: string;
+  serviceId: string;
+  serviceName: string;
+  branch: string;
+  commitSha: string;
+  image: string;
+  namespace: string;
+  url: string;
+  status: PreviewStatus;
+  createdAt: Date;
+  createdBy: string;
+  destroyedAt?: Date;
+  destroyedBy?: string;
+  error?: string;
+}

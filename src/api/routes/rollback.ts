@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import type { SlackClient } from '../../integrations/slack/client';
 import type { RollbackService } from '../../services/rollback/service';
 import type { ActionRequest } from '../../types/index';
 
@@ -15,9 +16,14 @@ const previewBody = z.object({
   reason: z.string(),
 });
 
-export async function rollbackRoutes(app: FastifyInstance, rollbackService: RollbackService) {
+export async function rollbackRoutes(
+  app: FastifyInstance,
+  rollbackService: RollbackService,
+  slack: SlackClient
+) {
   // POST /rollback/preview
-  // Evaluate policy, build a diff-enriched preview, return before touching anything
+  // Evaluate policy, build a diff-enriched preview, return before touching anything.
+  // If the action requires approval, fire a Slack notification in the background.
   app.post('/rollback/preview', async (req, reply) => {
     const parsed = previewBody.safeParse(req.body);
     if (!parsed.success) {
@@ -49,6 +55,13 @@ export async function rollbackRoutes(app: FastifyInstance, rollbackService: Roll
         containerName: body.containerName,
         reason: body.reason,
       });
+
+      // Fire Slack approval notification without blocking the response
+      if (action.status === 'pending_approval') {
+        slack.sendApprovalRequest(action, decision).catch((err: unknown) => {
+          app.log.warn({ err }, '[Slack] Failed to send approval notification');
+        });
+      }
 
       return reply.code(decision.allowed ? 200 : 403).send({ action, decision });
     } catch (err) {

@@ -8,7 +8,8 @@ export class GitHubClient {
     this.octokit = new Octokit({ auth: token });
   }
 
-  // Fetch the last N workflow runs for a repo that deployed to `environment`
+  // Fetch deployment history — tries GitHub Deployments API first, falls back to
+  // Actions workflow runs if no Deployments entries exist (most repos don't use the API).
   async getDeploymentHistory(
     repo: string,
     environment: string,
@@ -16,7 +17,6 @@ export class GitHubClient {
   ): Promise<Deployment[]> {
     const [owner, repoName] = this.splitRepo(repo);
 
-    // Use GitHub Deployments API
     const { data: ghDeployments } = await this.octokit.repos.listDeployments({
       owner,
       repo: repoName,
@@ -24,20 +24,8 @@ export class GitHubClient {
       per_page: limit,
     });
 
-    const deployments: Deployment[] = [];
-
-    for (const d of ghDeployments) {
-      // Get the statuses to confirm this was a successful deploy
-      const { data: statuses } = await this.octokit.repos.listDeploymentStatuses({
-        owner,
-        repo: repoName,
-        deployment_id: d.id,
-        per_page: 1,
-      });
-
-      const latestStatus = statuses[0];
-
-      deployments.push({
+    if (ghDeployments.length > 0) {
+      return ghDeployments.slice(0, limit).map((d) => ({
         id: String(d.id),
         serviceId: repo,
         sha: d.sha,
@@ -49,16 +37,74 @@ export class GitHubClient {
         deployedAt: new Date(d.created_at),
         environment: d.environment,
         workflowRunId: undefined,
-      });
-
-      // Stop early if we have enough successful deploys
-      if (deployments.length >= limit) break;
+      }));
     }
 
-    return deployments;
+    // Fallback: pull recent successful Actions runs — works for any repo with CI
+    return this.getRecentRuns(repo, environment, limit);
   }
 
-  // Fetch workflow run history as an alternative (GitHub Actions-based deployments)
+  // All recent workflow runs for a repo, across all workflows.
+  // Used as fallback when the Deployments API returns nothing.
+  async getRecentRuns(
+    repo: string,
+    environment: string,
+    limit = 10
+  ): Promise<Deployment[]> {
+    const [owner, repoName] = this.splitRepo(repo);
+
+    const { data } = await this.octokit.actions.listWorkflowRunsForRepo({
+      owner,
+      repo: repoName,
+      per_page: limit,
+    });
+
+    if (data.workflow_runs.length > 0) {
+      return data.workflow_runs.slice(0, limit).map((run) => ({
+        id: String(run.id),
+        serviceId: repo,
+        sha: run.head_sha,
+        ref: run.head_branch ?? 'main',
+        message: run.display_title ?? run.name ?? '',
+        author: run.triggering_actor?.login ?? 'unknown',
+        deployedAt: new Date(run.created_at),
+        environment,
+        workflowRunId: run.id,
+      }));
+    }
+
+    // Last resort: use recent commits — always available for any repo
+    return this.getRecentCommitsAsDeploys(repo, environment, limit);
+  }
+
+  // Maps recent commits to deployments — used when no CI data is available.
+  private async getRecentCommitsAsDeploys(
+    repo: string,
+    environment: string,
+    limit = 10
+  ): Promise<Deployment[]> {
+    const [owner, repoName] = this.splitRepo(repo);
+
+    const { data } = await this.octokit.repos.listCommits({
+      owner,
+      repo: repoName,
+      per_page: limit,
+    });
+
+    return data.map((commit) => ({
+      id: commit.sha,
+      serviceId: repo,
+      sha: commit.sha,
+      ref: 'main',
+      message: commit.commit.message.split('\n')[0] ?? '',
+      author: commit.commit.author?.name ?? commit.author?.login ?? 'unknown',
+      deployedAt: new Date(commit.commit.author?.date ?? commit.commit.committer?.date ?? Date.now()),
+      environment,
+      workflowRunId: undefined,
+    }));
+  }
+
+  // Fetch workflow run history for a specific workflow file
   async getWorkflowRunHistory(
     repo: string,
     workflowFileName: string,

@@ -1,28 +1,42 @@
 import * as k8s from '@kubernetes/client-node';
 
 export class KubernetesClient {
-  private appsApi: k8s.AppsV1Api;
+  private appsApi!: k8s.AppsV1Api;
+  private dryRun: boolean;
 
   constructor() {
-    const kc = new k8s.KubeConfig();
+    this.dryRun = process.env['K8S_DRY_RUN'] === 'true';
 
+    const kc = new k8s.KubeConfig();
     try {
       kc.loadFromDefault();
     } catch {
-      console.warn('[K8s] Could not load kubeconfig. Kubernetes operations will fail.');
+      console.warn('[K8s] Could not load kubeconfig — switching to dry-run mode.');
+      this.dryRun = true;
     }
 
-    this.appsApi = kc.makeApiClient(k8s.AppsV1Api);
+    if (!this.dryRun) {
+      this.appsApi = kc.makeApiClient(k8s.AppsV1Api);
+      const inner = this.appsApi as unknown as { defaultHeaders?: Record<string, string> };
+      if (inner.defaultHeaders) {
+        inner.defaultHeaders['Content-Type'] = 'application/strategic-merge-patch+json';
+      }
+    }
 
-    // v1.4.0 SDK uses fetch under the hood; set the strategic-merge-patch
-    // content-type as a default header so all patch calls use it.
-    const inner = this.appsApi as unknown as { defaultHeaders?: Record<string, string> };
-    if (inner.defaultHeaders) {
-      inner.defaultHeaders['Content-Type'] = 'application/strategic-merge-patch+json';
+    if (this.dryRun) {
+      console.log('[K8s] Running in DRY-RUN mode — Kubernetes calls will be simulated.');
     }
   }
 
   async getDeployment(namespace: string, name: string): Promise<k8s.V1Deployment> {
+    if (this.dryRun) {
+      // Return a minimal stub so callers can read image/replica fields safely
+      return {
+        metadata: { name, namespace },
+        spec: { selector: {}, template: { spec: { containers: [{ name: 'app', image: 'unknown' }] } } },
+        status: { replicas: 0, readyReplicas: 0, availableReplicas: 0 },
+      } as k8s.V1Deployment;
+    }
     return this.appsApi.readNamespacedDeployment({ name, namespace });
   }
 
@@ -32,7 +46,11 @@ export class KubernetesClient {
     containerName: string,
     image: string
   ): Promise<void> {
-    // Partial patch body — only the fields we want to change
+    if (this.dryRun) {
+      console.log(`[K8s DRY-RUN] Would patch ${namespace}/${deploymentName} container=${containerName} -> ${image}`);
+      return;
+    }
+
     const patch = {
       spec: {
         template: {
@@ -62,5 +80,22 @@ export class KubernetesClient {
       desired: dep.status?.replicas ?? 0,
       available: dep.status?.availableReplicas ?? 0,
     };
+  }
+
+  async createPreviewDeployment(namespace: string, deploymentName: string, image: string): Promise<void> {
+    if (this.dryRun) {
+      console.log(`[K8s DRY-RUN] Would create namespace ${namespace} and deploy ${deploymentName} image=${image}`);
+      return;
+    }
+    // Real implementation would: create namespace, then create Deployment manifest
+    throw new Error('createPreviewDeployment not implemented for live cluster');
+  }
+
+  async destroyPreviewDeployment(namespace: string): Promise<void> {
+    if (this.dryRun) {
+      console.log(`[K8s DRY-RUN] Would delete namespace ${namespace}`);
+      return;
+    }
+    throw new Error('destroyPreviewDeployment not implemented for live cluster');
   }
 }

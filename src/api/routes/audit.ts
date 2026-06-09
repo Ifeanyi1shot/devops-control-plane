@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { auditStore } from '../../core/audit/store';
+import type { AuditStore } from '../../core/audit/store';
 
-export async function auditRoutes(app: FastifyInstance) {
+export async function auditRoutes(app: FastifyInstance, auditStore: AuditStore) {
   // GET /audit — recent audit entries across all actions
   app.get<{ Querystring: { limit?: string } }>('/audit', async (req, reply) => {
     const limit = Math.min(parseInt(req.query.limit ?? '100', 10), 500);

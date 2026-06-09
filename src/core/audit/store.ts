@@ -1,11 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { AuditEntry, ActionRequest } from '../../types/index';
+import type { AuditRepository } from '../../db/repositories/audit';
 
-// In-memory append-only audit store.
-// Replace the private `entries` array with a PostgreSQL/ClickHouse write
-// once a database is wired in — the interface stays identical.
 export class AuditStore {
-  private entries: AuditEntry[] = [];
+  constructor(private repo: AuditRepository) {}
 
   log(
     actionId: string,
@@ -26,26 +24,20 @@ export class AuditStore {
       timestamp: new Date(),
     };
 
-    this.entries.push(entry);
+    this.repo.insert(entry);
     console.log(`[Audit] ${entry.timestamp.toISOString()} | ${actor} | ${event} | action=${actionId}`);
     return entry;
   }
 
   getByActionId(actionId: string): AuditEntry[] {
-    return this.entries.filter((e) => e.actionId === actionId);
+    return this.repo.findByActionId(actionId);
   }
 
   getByServiceId(serviceId: string, limit = 50): AuditEntry[] {
-    return this.entries
-      .filter((e) => e.serviceId === serviceId)
-      .slice(-limit)
-      .reverse();
+    return this.repo.findByServiceId(serviceId, limit);
   }
 
   getAll(limit = 100): AuditEntry[] {
-    return this.entries.slice(-limit).reverse();
+    return this.repo.findAll(limit);
   }
 }
-
-// Singleton — shared across the app
-export const auditStore = new AuditStore();

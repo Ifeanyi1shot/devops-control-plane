@@ -8,22 +8,20 @@ import type {
   Service,
 } from '../../types/index';
 import { PolicyEngine } from '../policy/engine';
-import { auditStore } from '../audit/store';
-
-// In-memory action store — swap for DB later
-const actions = new Map<string, Action>();
+import type { AuditStore } from '../audit/store';
+import type { ActionsRepository } from '../../db/repositories/actions';
 
 export class ActionOrchestrator {
-  private policy: PolicyEngine;
-
-  constructor(policy: PolicyEngine) {
-    this.policy = policy;
-  }
+  constructor(
+    private policy: PolicyEngine,
+    private actionsRepo: ActionsRepository,
+    private auditStore: AuditStore,
+  ) {}
 
   // Step 1 — evaluate the request and return a preview (no side effects yet)
   async preview(
     request: ActionRequest,
-    service: Service,
+    _service: Service,
     buildPreviewDetail: (actionId: string, decision: PolicyDecision) => Promise<Omit<ActionPreview, 'actionId' | 'requiresApproval' | 'policyName'>>
   ): Promise<{ action: Action; decision: PolicyDecision }> {
     const decision = this.policy.evaluate(request);
@@ -58,15 +56,15 @@ export class ActionOrchestrator {
       updatedAt: new Date(),
     };
 
-    actions.set(actionId, action);
+    this.actionsRepo.save(action);
 
-    auditStore.log(actionId, request.type, request.serviceId, request.requestedBy, 'action.previewed', {
+    this.auditStore.log(actionId, request.type, request.serviceId, request.requestedBy, 'action.previewed', {
       decision,
       status,
     });
 
     if (!decision.allowed) {
-      auditStore.log(actionId, request.type, request.serviceId, 'system', 'action.denied', {
+      this.auditStore.log(actionId, request.type, request.serviceId, 'system', 'action.denied', {
         reason: decision.reason,
       });
     }
@@ -86,7 +84,8 @@ export class ActionOrchestrator {
     action.approvedBy = approvedBy;
     action.updatedAt = new Date();
 
-    auditStore.log(actionId, action.type, action.serviceId, approvedBy, 'action.approved');
+    this.actionsRepo.update(action);
+    this.auditStore.log(actionId, action.type, action.serviceId, approvedBy, 'action.approved');
     return action;
   }
 
@@ -103,7 +102,8 @@ export class ActionOrchestrator {
     action.rejectionReason = reason;
     action.updatedAt = new Date();
 
-    auditStore.log(actionId, action.type, action.serviceId, rejectedBy, 'action.rejected', { reason });
+    this.actionsRepo.update(action);
+    this.auditStore.log(actionId, action.type, action.serviceId, rejectedBy, 'action.rejected', { reason });
     return action;
   }
 
@@ -120,7 +120,8 @@ export class ActionOrchestrator {
 
     action.status = 'executing';
     action.updatedAt = new Date();
-    auditStore.log(actionId, action.type, action.serviceId, 'system', 'action.executing');
+    this.actionsRepo.update(action);
+    this.auditStore.log(actionId, action.type, action.serviceId, 'system', 'action.executing');
 
     try {
       const result = await executeFn(action);
@@ -128,15 +129,17 @@ export class ActionOrchestrator {
       action.status = 'completed';
       action.completedAt = new Date();
       action.updatedAt = new Date();
+      this.actionsRepo.update(action);
 
-      auditStore.log(actionId, action.type, action.serviceId, 'system', 'action.completed', result);
+      this.auditStore.log(actionId, action.type, action.serviceId, 'system', 'action.completed', result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       action.status = 'failed';
       action.error = message;
       action.updatedAt = new Date();
+      this.actionsRepo.update(action);
 
-      auditStore.log(actionId, action.type, action.serviceId, 'system', 'action.failed', { error: message });
+      this.auditStore.log(actionId, action.type, action.serviceId, 'system', 'action.failed', { error: message });
       throw err;
     }
 
@@ -144,17 +147,15 @@ export class ActionOrchestrator {
   }
 
   getById(actionId: string): Action | undefined {
-    return actions.get(actionId);
+    return this.actionsRepo.findById(actionId);
   }
 
   getAll(): Action[] {
-    return Array.from(actions.values()).sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
-    );
+    return this.actionsRepo.findAll();
   }
 
   private getOrThrow(actionId: string): Action {
-    const action = actions.get(actionId);
+    const action = this.actionsRepo.findById(actionId);
     if (!action) throw new Error(`Action not found: ${actionId}`);
     return action;
   }
