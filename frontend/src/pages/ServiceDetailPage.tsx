@@ -411,6 +411,12 @@ export function ServiceDetailPage() {
   )
 }
 
+const SOURCE_LABEL: Record<string, { label: string; title: string }> = {
+  deployment: { label: 'deploy', title: 'From GitHub Deployments API' },
+  run:        { label: 'run',    title: 'From GitHub Actions workflow run' },
+  commit:     { label: 'commit', title: 'From branch commit history' },
+}
+
 function DeploymentRow({
   deployment,
   isCurrent,
@@ -422,23 +428,67 @@ function DeploymentRow({
   isSelected: boolean
   onSelect: () => void
 }) {
+  const src = SOURCE_LABEL[deployment.source] ?? SOURCE_LABEL['commit']
+
   return (
     <div
-      className={`px-5 py-3.5 flex items-center gap-4 ${
+      className={`px-5 py-3.5 flex items-center gap-3 ${
         isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
       } transition-colors`}
     >
-      <div className="font-mono text-sm font-semibold text-gray-800 w-16 shrink-0">
-        {shortSha(deployment.sha)}
+      {/* Avatar */}
+      {deployment.avatarUrl ? (
+        <img
+          src={deployment.avatarUrl}
+          alt={deployment.author}
+          className="w-7 h-7 rounded-full shrink-0 border border-gray-200"
+        />
+      ) : (
+        <div className="w-7 h-7 rounded-full bg-gray-200 shrink-0 flex items-center justify-center text-xs text-gray-500 font-medium">
+          {deployment.author.charAt(0).toUpperCase()}
+        </div>
+      )}
+
+      {/* SHA — links to GitHub */}
+      <div className="w-16 shrink-0">
+        {deployment.commitUrl ? (
+          <a
+            href={deployment.commitUrl}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="font-mono text-sm font-semibold text-blue-600 hover:underline"
+          >
+            {shortSha(deployment.sha)}
+          </a>
+        ) : (
+          <span className="font-mono text-sm font-semibold text-gray-800">
+            {shortSha(deployment.sha)}
+          </span>
+        )}
       </div>
+
+      {/* Message + meta */}
       <div className="flex-1 min-w-0">
         <p className="text-sm text-gray-800 truncate">
           {deployment.message || <span className="text-gray-400 italic">No message</span>}
         </p>
-        <p className="text-xs text-gray-400 mt-0.5">
-          {deployment.author} · {formatDate(deployment.deployedAt)}
+        <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
+          <span>{deployment.author}</span>
+          <span>·</span>
+          <span>{formatDate(deployment.deployedAt)}</span>
+          <span>·</span>
+          <span className="font-mono">{deployment.ref}</span>
+          <span
+            title={src?.title}
+            className="text-gray-300 border border-gray-200 rounded px-1 py-px text-[10px]"
+          >
+            {src?.label}
+          </span>
         </p>
       </div>
+
+      {/* Action */}
       <div className="shrink-0 flex items-center gap-2">
         {isCurrent ? (
           <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-100 text-green-700 border border-green-200">

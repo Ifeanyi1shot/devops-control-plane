@@ -1,0 +1,24 @@
+# Service Registry
+# Add or edit services here — no code changes needed.
+# Fields:
+#   id          unique slug used in URLs and audit logs
+#   name        human-readable display name
+#   repo        GitHub "owner/repo"
+#   namespace   Kubernetes namespace
+#   deployment  Kubernetes deployment name
+#   owner       team or person responsible
+#   onCall      (optional) on-call rotation name
+#   runbookUrl  (optional) link to runbook docs
+#   tags        arbitrary key/value labels
+
+services:
+  - id: devops-control-plane
+    name: DevOps Control Plane
+    repo: Ifeanyi1shot/devops-control-plane
+    namespace: production
+    deployment: devops-control-plane
+    owner: Ifeanyi1shot
+    runbookUrl: https://github.com/Ifeanyi1shot/devops-control-plane/blob/main/README.md
+    tags:
+      team: platform
+      tier: critical

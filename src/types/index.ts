@@ -28,9 +28,12 @@ export interface Deployment {
   ref: string;
   message: string;
   author: string;
+  avatarUrl?: string;
+  commitUrl?: string;
   deployedAt: Date;
   workflowRunId?: number;
   environment: string;
+  source: 'deployment' | 'run' | 'commit';
 }
 
 export interface ActionRequest {

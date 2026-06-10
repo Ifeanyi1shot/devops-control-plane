@@ -30,8 +30,9 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/frontend/dist ./frontend/dist
 
-# Copy policies
+# Copy policies and service registry
 COPY policies/ ./policies/
+COPY services.yaml ./
 
 # SQLite database lives on a mounted volume at /app/data
 ENV DB_PATH=/app/data/control-plane.db

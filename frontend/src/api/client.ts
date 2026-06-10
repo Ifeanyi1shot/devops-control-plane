@@ -117,3 +117,25 @@ export async function destroyPreviewEnv(
     body: JSON.stringify({ destroyedBy }),
   })
 }
+
+export interface AuditEntry {
+  id: string
+  actionId: string
+  actionType: string
+  serviceId: string
+  actor: string
+  event: string
+  detail: Record<string, unknown>
+  timestamp: string
+}
+
+export async function getAuditLog(limit = 100): Promise<{ entries: AuditEntry[] }> {
+  return request(`/audit?limit=${limit}`)
+}
+
+export async function getAuditByService(
+  serviceId: string,
+  limit = 50,
+): Promise<{ entries: AuditEntry[] }> {
+  return request(`/audit/services/${serviceId}?limit=${limit}`)
+}

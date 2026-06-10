@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { NavBar } from './components/NavBar'
+import { AuditLogPage } from './pages/AuditLogPage'
 import { PreviewEnvsPage } from './pages/PreviewEnvsPage'
 import { RollbackPreviewPage } from './pages/RollbackPreviewPage'
 import { ServiceDetailPage } from './pages/ServiceDetailPage'
@@ -15,6 +16,7 @@ export function App() {
           <Route path="/services/:id" element={<ServiceDetailPage />} />
           <Route path="/rollback/preview" element={<RollbackPreviewPage />} />
           <Route path="/preview-env" element={<PreviewEnvsPage />} />
+          <Route path="/audit" element={<AuditLogPage />} />
         </Routes>
       </div>
     </BrowserRouter>
