@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { getDeployments, getService, listPreviewEnvs } from '../api/client'
+import { type RollbackAnalysis, analyzeRollback, getDeployments, getService, listPreviewEnvs } from '../api/client'
 import { Spinner } from '../components/Spinner'
 import type { Deployment, PreviewEnvironment, RollbackNavigationState, Service } from '../types'
 
@@ -62,6 +62,11 @@ export function ServiceDetailPage() {
   const [identity, setIdentity] = useState<Identity>(loadIdentity)
   const [environment, setEnvironment] = useState('production')
 
+  // AI analysis state
+  const [analysis, setAnalysis] = useState<RollbackAnalysis | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
+
   // Active rollback form state
   const [selectedDeploy, setSelectedDeploy] = useState<Deployment | null>(null)
   const [form, setForm] = useState<RollbackForm>({
@@ -87,6 +92,8 @@ export function ServiceDetailPage() {
   function handleSelectDeploy(dep: Deployment) {
     if (!service) return
     setSelectedDeploy(dep)
+    setAnalysis(null)
+    setAnalysisError(null)
     setForm({
       targetImage: deriveImage(service.repo, dep.sha),
       containerName: 'app',
@@ -94,6 +101,23 @@ export function ServiceDetailPage() {
       reason: '',
     })
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+  }
+
+  async function analyzeSelected() {
+    if (!selectedDeploy || !service || deployments.length === 0) return
+    const currentSha = deployments[0]?.sha ?? ''
+    if (!currentSha || currentSha === selectedDeploy.sha) return
+    setAnalyzing(true)
+    setAnalysis(null)
+    setAnalysisError(null)
+    try {
+      const res = await analyzeRollback(service.id, currentSha, selectedDeploy.sha, form.reason)
+      setAnalysis(res.analysis)
+    } catch (e) {
+      setAnalysisError(e instanceof Error ? e.message : 'Analysis failed')
+    } finally {
+      setAnalyzing(false)
+    }
   }
 
   function handleIdentityChange(field: keyof Identity, value: string) {
@@ -317,6 +341,51 @@ export function ServiceDetailPage() {
         )}
       </div>
 
+      {/* AI analysis panel — appears when a deploy is selected */}
+      {selectedDeploy && (
+        <div className="bg-white rounded-lg border border-purple-200 shadow-sm">
+          <div className="px-5 py-4 border-b border-purple-100 bg-purple-50 rounded-t-lg flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold text-purple-900 flex items-center gap-2">
+                <span>AI Rollback Assistant</span>
+                <span className="text-xs font-normal text-purple-500">powered by Claude</span>
+              </h2>
+              <p className="text-xs text-purple-600 mt-0.5">
+                Analyzes the diff and tells you what will change, what's at risk, and what to verify.
+              </p>
+            </div>
+            {!analysis && !analyzing && (
+              <button
+                onClick={analyzeSelected}
+                className="text-sm font-medium px-4 py-2 rounded-md bg-purple-600 text-white hover:bg-purple-700 transition-colors shrink-0"
+              >
+                Analyze with AI
+              </button>
+            )}
+          </div>
+
+          <div className="px-5 py-4">
+            {analyzing && (
+              <div className="flex items-center gap-3 text-sm text-gray-500">
+                <Spinner label="" />
+                <span>Claude is analyzing the diff...</span>
+              </div>
+            )}
+            {analysisError && (
+              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                {analysisError}
+              </div>
+            )}
+            {!analysis && !analyzing && !analysisError && (
+              <p className="text-sm text-gray-400">
+                Click "Analyze with AI" to get a risk assessment before proceeding.
+              </p>
+            )}
+            {analysis && <AnalysisResult analysis={analysis} onReanalyze={analyzeSelected} />}
+          </div>
+        </div>
+      )}
+
       {/* Rollback form — appears when a deploy is selected */}
       {selectedDeploy && (
         <div ref={formRef} className="bg-white rounded-lg border-2 border-blue-200 shadow-sm">
@@ -432,9 +501,14 @@ function DeploymentRow({
 
   return (
     <div
-      className={`px-5 py-3.5 flex items-center gap-3 ${
-        isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
-      } transition-colors`}
+      onClick={isCurrent ? undefined : onSelect}
+      className={`px-5 py-3.5 flex items-center gap-3 transition-colors ${
+        isCurrent
+          ? ''
+          : isSelected
+            ? 'bg-blue-50'
+            : 'hover:bg-gray-50 cursor-pointer'
+      }`}
     >
       {/* Avatar */}
       {deployment.avatarUrl ? (
@@ -449,22 +523,25 @@ function DeploymentRow({
         </div>
       )}
 
-      {/* SHA — links to GitHub */}
-      <div className="w-16 shrink-0">
-        {deployment.commitUrl ? (
+      {/* SHA + external link icon */}
+      <div className="w-20 shrink-0 flex items-center gap-1">
+        <span className="font-mono text-sm font-semibold text-gray-800">
+          {shortSha(deployment.sha)}
+        </span>
+        {deployment.commitUrl && (
           <a
             href={deployment.commitUrl}
             target="_blank"
             rel="noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="font-mono text-sm font-semibold text-blue-600 hover:underline"
+            title="View on GitHub"
+            className="text-gray-400 hover:text-blue-500 transition-colors"
           >
-            {shortSha(deployment.sha)}
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+              <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
+            </svg>
           </a>
-        ) : (
-          <span className="font-mono text-sm font-semibold text-gray-800">
-            {shortSha(deployment.sha)}
-          </span>
         )}
       </div>
 
@@ -488,23 +565,20 @@ function DeploymentRow({
         </p>
       </div>
 
-      {/* Action */}
-      <div className="shrink-0 flex items-center gap-2">
+      {/* Status badge */}
+      <div className="shrink-0">
         {isCurrent ? (
           <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-100 text-green-700 border border-green-200">
             current
           </span>
         ) : (
-          <button
-            onClick={onSelect}
-            className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${
-              isSelected
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-blue-600 border-blue-300 hover:bg-blue-50'
-            }`}
-          >
-            {isSelected ? 'Selected' : 'Roll back to this'}
-          </button>
+          <span className={`text-xs font-medium px-2 py-0.5 rounded border transition-colors ${
+            isSelected
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-white text-gray-400 border-gray-200'
+          }`}>
+            {isSelected ? 'Selected ✓' : 'Roll back'}
+          </span>
         )}
       </div>
     </div>
@@ -550,6 +624,77 @@ function Row({
     <div className="flex items-center gap-2">
       <dt className="w-24 text-gray-400 shrink-0">{label}</dt>
       <dd className={`text-gray-700 truncate ${mono ? 'font-mono text-xs' : ''}`}>{value}</dd>
+    </div>
+  )
+}
+
+const RISK_STYLES: Record<string, { badge: string; border: string; bg: string }> = {
+  low:      { badge: 'bg-green-100 text-green-700',   border: 'border-green-200', bg: 'bg-green-50' },
+  medium:   { badge: 'bg-yellow-100 text-yellow-700', border: 'border-yellow-200', bg: 'bg-yellow-50' },
+  high:     { badge: 'bg-orange-100 text-orange-700', border: 'border-orange-200', bg: 'bg-orange-50' },
+  critical: { badge: 'bg-red-100 text-red-700',       border: 'border-red-300',   bg: 'bg-red-50' },
+}
+
+function AnalysisResult({
+  analysis,
+  onReanalyze,
+}: {
+  analysis: RollbackAnalysis
+  onReanalyze: () => void
+}) {
+  const style = RISK_STYLES[analysis.riskLevel] ?? RISK_STYLES['medium']
+
+  return (
+    <div className="space-y-4">
+      {/* Risk level + summary */}
+      <div className={`rounded-lg border ${style.border} ${style.bg} px-4 py-3`}>
+        <div className="flex items-center gap-2 mb-1">
+          <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wide ${style.badge}`}>
+            {analysis.riskLevel} risk
+          </span>
+          <span className="text-xs text-gray-500">{analysis.riskReason}</span>
+        </div>
+        <p className="text-sm text-gray-800">{analysis.summary}</p>
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-4">
+        {/* Affected areas */}
+        <div>
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Affected Areas
+          </h4>
+          <ul className="space-y-1">
+            {analysis.affectedAreas.map((area, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                <span className="text-gray-400 mt-0.5">•</span>
+                {area}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Verification steps */}
+        <div>
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            After Rollback, Verify
+          </h4>
+          <ol className="space-y-1">
+            {analysis.verificationSteps.map((step, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                <span className="text-gray-400 shrink-0 font-mono text-xs mt-0.5">{i + 1}.</span>
+                {step}
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+
+      <button
+        onClick={onReanalyze}
+        className="text-xs text-purple-600 hover:underline"
+      >
+        Re-analyze
+      </button>
     </div>
   )
 }

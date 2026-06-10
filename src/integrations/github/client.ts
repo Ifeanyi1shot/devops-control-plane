@@ -134,6 +134,44 @@ export class GitHubClient {
     }));
   }
 
+  async getDetailedDiff(
+    repo: string,
+    baseSha: string,
+    headSha: string,
+  ): Promise<{
+    files: Array<{ filename: string; status: string; additions: number; deletions: number; patch?: string }>;
+    additions: number;
+    deletions: number;
+    commitMessages: string[];
+  }> {
+    const [owner, repoName] = this.splitRepo(repo);
+
+    const compareRes = await this.octokit.repos.compareCommits({
+      owner,
+      repo: repoName,
+      base: baseSha,
+      head: headSha,
+    });
+
+    const files = (compareRes.data.files ?? []).map((f) => ({
+      filename: f.filename,
+      status: f.status,
+      additions: f.additions ?? 0,
+      deletions: f.deletions ?? 0,
+      patch: f.patch,
+    }));
+
+    const additions = files.reduce((acc, f) => acc + f.additions, 0);
+    const deletions = files.reduce((acc, f) => acc + f.deletions, 0);
+
+    // Commits that are in head but not in base (what will be reverted)
+    const commitMessages = compareRes.data.commits
+      .map((c) => c.commit.message.split('\n')[0] ?? '')
+      .filter(Boolean);
+
+    return { files, additions, deletions, commitMessages };
+  }
+
   async getCommitDiff(
     repo: string,
     baseSha: string,

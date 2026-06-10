@@ -118,6 +118,27 @@ export async function destroyPreviewEnv(
   })
 }
 
+export interface RollbackAnalysis {
+  summary: string
+  riskLevel: 'low' | 'medium' | 'high' | 'critical'
+  riskReason: string
+  affectedAreas: string[]
+  verificationSteps: string[]
+}
+
+export async function analyzeRollback(
+  serviceId: string,
+  currentSha: string,
+  targetSha: string,
+  reason: string,
+): Promise<{ analysis: RollbackAnalysis }> {
+  return request('/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ serviceId, currentSha, targetSha, reason }),
+  })
+}
+
 export interface AuditEntry {
   id: string
   actionId: string

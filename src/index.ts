@@ -9,6 +9,7 @@ import { createDatabase } from './db/index';
 import { PolicyEngine } from './core/policy/engine';
 import { AuditStore } from './core/audit/store';
 import { ActionOrchestrator } from './core/action/orchestrator';
+import { AiClient } from './integrations/ai/client';
 import { GitHubClient } from './integrations/github/client';
 import { KubernetesClient } from './integrations/kubernetes/client';
 import { SlackClient } from './integrations/slack/client';
@@ -16,6 +17,7 @@ import { RollbackService } from './services/rollback/service';
 import { PreviewEnvService } from './services/preview/service';
 import { registry } from './services/registry';
 
+import { analyzeRoutes } from './api/routes/analyze';
 import { servicesRoutes } from './api/routes/services';
 import { rollbackRoutes } from './api/routes/rollback';
 import { actionsRoutes } from './api/routes/actions';
@@ -23,6 +25,7 @@ import { auditRoutes } from './api/routes/audit';
 import { slackRoutes } from './api/routes/slack';
 import { previewEnvRoutes } from './api/routes/preview';
 
+const ANTHROPIC_API_KEY = process.env['ANTHROPIC_API_KEY'] ?? '';
 const PORT = parseInt(process.env['PORT'] ?? '3002', 10);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
 const GITHUB_TOKEN = process.env['GITHUB_TOKEN'] ?? '';
@@ -43,6 +46,8 @@ async function bootstrap() {
   const github = new GitHubClient(GITHUB_TOKEN);
   const k8s = new KubernetesClient();
   const slack = new SlackClient(SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, SLACK_APPROVAL_CHANNEL);
+
+  const ai = ANTHROPIC_API_KEY ? new AiClient(ANTHROPIC_API_KEY) : null;
 
   const rollbackService = new RollbackService(orchestrator, github, k8s, registry, auditStore);
   const previewEnvService = new PreviewEnvService(k8s, db.previews);
@@ -86,6 +91,7 @@ async function bootstrap() {
 
   // All API routes under /api prefix (matches frontend's BASE = '/api')
   await app.register(async (api) => {
+    await analyzeRoutes(api, github, ai);
     await servicesRoutes(api, github);
     await rollbackRoutes(api, rollbackService, slack);
     await actionsRoutes(api, orchestrator);
@@ -112,6 +118,7 @@ async function bootstrap() {
     if (slack.isConfigured()) {
       console.log(`  Slack notifications → ${SLACK_APPROVAL_CHANNEL}`);
     }
+    console.log(`  AI analysis        → ${ai ? 'enabled (claude-haiku)' : 'disabled (set ANTHROPIC_API_KEY)'}`);
     console.log('');
   } catch (err) {
     app.log.error(err);
