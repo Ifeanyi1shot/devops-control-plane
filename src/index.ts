@@ -19,6 +19,7 @@ import { registry } from './services/registry';
 
 import { authRoutes } from './api/routes/auth';
 import { analyzeRoutes } from './api/routes/analyze';
+import { metricsRoutes } from './api/routes/metrics';
 import { servicesRoutes } from './api/routes/services';
 import { rollbackRoutes } from './api/routes/rollback';
 import { actionsRoutes } from './api/routes/actions';
@@ -109,6 +110,7 @@ async function bootstrap() {
   // All API routes under /api prefix (matches frontend's BASE = '/api')
   await app.register(async (api) => {
     await analyzeRoutes(api, github, ai);
+    await metricsRoutes(api, db.metrics);
     await servicesRoutes(api, github);
     await rollbackRoutes(api, rollbackService, slack);
     await actionsRoutes(api, orchestrator);

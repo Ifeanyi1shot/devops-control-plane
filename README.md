@@ -69,6 +69,16 @@ This control plane replaces that entire flow with a single web interface:
 - Timezone-aware — set `POLICY_TIMEZONE` to enforce time windows in your local timezone
 - Built-in rules: production weekend freeze, engineer requires approval, senior engineer self-service, staging open, preview environments open
 
+### DORA Metrics Dashboard
+- Dedicated `/metrics` page showing engineering performance from the audit log
+- **Deployment Frequency** — completed actions per day over the last 30 days, bar chart
+- **Mean Time to Recovery (MTTR)** — average and daily trend of time from rollback initiated to completed
+- **Change Failure Rate** — percentage of completed actions that were rollbacks
+- **Action Breakdown** — proportion of rollbacks vs deploys vs preview environments
+- **Most Active** — top 5 actors by action count
+- DORA benchmark reference panel (Elite / High / Medium thresholds)
+- Zero new data collection needed — calculated entirely from the existing audit log
+
 ### Audit Log UI
 - Dedicated `/audit` page in the web UI
 - Color-coded event badges (completed, approved, executing, failed, rejected, etc.)
@@ -319,6 +329,7 @@ ngrok http 3002
 | GET | `/api/audit` | Global audit log |
 | GET | `/api/audit/actions/:id` | Audit log for a specific action |
 | GET | `/api/audit/services/:id` | Audit log for a specific service |
+| GET | `/api/metrics` | DORA metrics (frequency, MTTR, CFR, breakdowns) |
 | POST | `/slack/interactions` | Slack interactive payload handler |
 
 ---
@@ -351,9 +362,9 @@ docker run -p 3002:3002 \
 - [x] Preview environments
 - [x] SQLite persistence
 - [x] Docker support
+- [x] DORA metrics dashboard (deployment frequency, MTTR, change failure rate)
 - [ ] Real Kubernetes cluster integration
 - [ ] Policy editor UI
-- [ ] Service health / DORA metrics dashboard
 - [ ] PR-based preview environment creation
 
 ---

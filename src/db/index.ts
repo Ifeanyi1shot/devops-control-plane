@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { ActionsRepository } from './repositories/actions';
 import { AuditRepository } from './repositories/audit';
+import { MetricsRepository } from './repositories/metrics';
 import { PreviewsRepository } from './repositories/previews';
 
 export function createDatabase() {
@@ -77,5 +78,6 @@ export function createDatabase() {
     actions:  new ActionsRepository(db),
     audit:    new AuditRepository(db),
     previews: new PreviewsRepository(db),
+    metrics:  new MetricsRepository(db),
   };
 }

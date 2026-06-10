@@ -160,3 +160,29 @@ export async function getAuditByService(
 ): Promise<{ entries: AuditEntry[] }> {
   return request(`/audit/services/${serviceId}?limit=${limit}`)
 }
+
+export interface MetricsSummary {
+  totalCompleted: number
+  totalRollbacks: number
+  changeFailureRate: number
+  avgMttrMinutes: number | null
+  deploymentsLast7Days: number
+  deploymentsLast30Days: number
+}
+
+export interface DailyCount {
+  date: string
+  count: number
+}
+
+export interface MetricsData {
+  summary: MetricsSummary
+  deploymentFrequency: DailyCount[]
+  mttrTrend: DailyCount[]
+  topActors: Array<{ actor: string; count: number }>
+  actionBreakdown: Array<{ actionType: string; count: number }>
+}
+
+export async function getMetrics(): Promise<MetricsData> {
+  return request('/metrics')
+}
