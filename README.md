@@ -71,11 +71,14 @@ This control plane replaces that entire flow with a single web interface:
 
 ### Deployment Locks
 - Lock any service to block all rollbacks during incidents, freeze windows, or planned maintenance
+- **Scoped locking**: lock by environment (production only, staging only, etc.) and/or branch — other environments stay unblocked
+- A production-only lock never blocks a staging rollback; a service-wide lock blocks everything
 - Visible everywhere: orange border and 🔒 badge on the Services list, full banner on the service detail page
-- Lock banner shows who locked it, the reason, and how long ago
+- Lock banner shows who locked it, the reason, the scope (environment + branch chips), and how long ago
 - Unlock with one click — no page reload needed
 - All lock/unlock events recorded in the audit log (`service.locked` / `service.unlocked`)
 - Locked services return HTTP 423 on any rollback attempt — API-safe
+- Existing databases are migrated automatically on startup (no manual SQL needed)
 - `GET/POST/DELETE /api/services/:id/lock` endpoints, plus `GET /api/locks` to list all locked services
 
 ### DORA Metrics Dashboard
