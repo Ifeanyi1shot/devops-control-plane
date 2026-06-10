@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { ActionsRepository } from './repositories/actions';
 import { AuditRepository } from './repositories/audit';
+import { LocksRepository } from './repositories/locks';
 import { MetricsRepository } from './repositories/metrics';
 import { PreviewsRepository } from './repositories/previews';
 
@@ -70,6 +71,14 @@ export function createDatabase() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_preview_service_id ON preview_environments(service_id);
+
+    CREATE TABLE IF NOT EXISTS service_locks (
+      id         TEXT PRIMARY KEY,
+      service_id TEXT NOT NULL UNIQUE,
+      locked_by  TEXT NOT NULL,
+      reason     TEXT NOT NULL,
+      locked_at  TEXT NOT NULL
+    );
   `);
 
   console.log(`[DB] SQLite database ready at ${dbPath}`);
@@ -79,5 +88,6 @@ export function createDatabase() {
     audit:    new AuditRepository(db),
     previews: new PreviewsRepository(db),
     metrics:  new MetricsRepository(db),
+    locks:    new LocksRepository(db),
   };
 }

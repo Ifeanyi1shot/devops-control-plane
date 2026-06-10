@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import type { LocksRepository } from '../../db/repositories/locks';
 import type { SlackClient } from '../../integrations/slack/client';
 import type { RollbackService } from '../../services/rollback/service';
 import type { ActionRequest } from '../../types/index';
@@ -19,7 +20,8 @@ const previewBody = z.object({
 export async function rollbackRoutes(
   app: FastifyInstance,
   rollbackService: RollbackService,
-  slack: SlackClient
+  slack: SlackClient,
+  locks: LocksRepository,
 ) {
   // POST /rollback/preview
   // Evaluate policy, build a diff-enriched preview, return before touching anything.
@@ -28,6 +30,15 @@ export async function rollbackRoutes(
     const parsed = previewBody.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: 'Invalid request', details: parsed.error.flatten() });
+    }
+
+    // Check deployment lock before anything else
+    const lock = locks.findByServiceId(parsed.data.serviceId);
+    if (lock) {
+      return reply.code(423).send({
+        error: `Service is locked by ${lock.lockedBy}: "${lock.reason}"`,
+        lock,
+      });
     }
 
     const body = parsed.data;

@@ -19,6 +19,7 @@ import { registry } from './services/registry';
 
 import { authRoutes } from './api/routes/auth';
 import { analyzeRoutes } from './api/routes/analyze';
+import { locksRoutes } from './api/routes/locks';
 import { metricsRoutes } from './api/routes/metrics';
 import { servicesRoutes } from './api/routes/services';
 import { rollbackRoutes } from './api/routes/rollback';
@@ -111,8 +112,9 @@ async function bootstrap() {
   await app.register(async (api) => {
     await analyzeRoutes(api, github, ai);
     await metricsRoutes(api, db.metrics);
-    await servicesRoutes(api, github);
-    await rollbackRoutes(api, rollbackService, slack);
+    await locksRoutes(api, db.locks, auditStore);
+    await servicesRoutes(api, github, db.locks);
+    await rollbackRoutes(api, rollbackService, slack, db.locks);
     await actionsRoutes(api, orchestrator);
     await auditRoutes(api, auditStore);
     await previewEnvRoutes(api, previewEnvService);

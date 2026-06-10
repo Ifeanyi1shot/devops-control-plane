@@ -69,6 +69,15 @@ This control plane replaces that entire flow with a single web interface:
 - Timezone-aware — set `POLICY_TIMEZONE` to enforce time windows in your local timezone
 - Built-in rules: production weekend freeze, engineer requires approval, senior engineer self-service, staging open, preview environments open
 
+### Deployment Locks
+- Lock any service to block all rollbacks during incidents, freeze windows, or planned maintenance
+- Visible everywhere: orange border and 🔒 badge on the Services list, full banner on the service detail page
+- Lock banner shows who locked it, the reason, and how long ago
+- Unlock with one click — no page reload needed
+- All lock/unlock events recorded in the audit log (`service.locked` / `service.unlocked`)
+- Locked services return HTTP 423 on any rollback attempt — API-safe
+- `GET/POST/DELETE /api/services/:id/lock` endpoints, plus `GET /api/locks` to list all locked services
+
 ### DORA Metrics Dashboard
 - Dedicated `/metrics` page showing engineering performance from the audit log
 - **Deployment Frequency** — completed actions per day over the last 30 days, bar chart
@@ -330,6 +339,10 @@ ngrok http 3002
 | GET | `/api/audit/actions/:id` | Audit log for a specific action |
 | GET | `/api/audit/services/:id` | Audit log for a specific service |
 | GET | `/api/metrics` | DORA metrics (frequency, MTTR, CFR, breakdowns) |
+| GET | `/api/services/:id/lock` | Get current lock for a service |
+| POST | `/api/services/:id/lock` | Lock a service (blocks rollbacks) |
+| DELETE | `/api/services/:id/lock` | Unlock a service |
+| GET | `/api/locks` | List all currently locked services |
 | POST | `/slack/interactions` | Slack interactive payload handler |
 
 ---
@@ -363,6 +376,7 @@ docker run -p 3002:3002 \
 - [x] SQLite persistence
 - [x] Docker support
 - [x] DORA metrics dashboard (deployment frequency, MTTR, change failure rate)
+- [x] Deployment locks (block rollbacks during incidents or freeze windows)
 - [ ] Real Kubernetes cluster integration
 - [ ] Policy editor UI
 - [ ] PR-based preview environment creation

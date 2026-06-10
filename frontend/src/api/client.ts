@@ -1,4 +1,4 @@
-import type { Action, Deployment, PolicyDecision, PreviewEnvironment, Service } from '../types'
+import type { Action, Deployment, PolicyDecision, PreviewEnvironment, Service, ServiceLock } from '../types'
 
 const BASE = '/api'
 
@@ -17,6 +17,29 @@ export async function getServices(): Promise<{ services: Service[] }> {
 
 export async function getService(id: string): Promise<{ service: Service }> {
   return request(`/services/${id}`)
+}
+
+export async function lockService(
+  serviceId: string,
+  lockedBy: string,
+  reason: string,
+): Promise<{ lock: ServiceLock }> {
+  return request(`/services/${serviceId}/lock`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lockedBy, reason }),
+  })
+}
+
+export async function unlockService(
+  serviceId: string,
+  unlockedBy: string,
+): Promise<{ message: string }> {
+  return request(`/services/${serviceId}/lock`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ unlockedBy }),
+  })
 }
 
 export async function getDeployments(

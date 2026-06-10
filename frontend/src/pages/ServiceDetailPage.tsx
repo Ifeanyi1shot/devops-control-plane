@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { type RollbackAnalysis, analyzeRollback, getDeployments, getService, listPreviewEnvs } from '../api/client'
+import { type RollbackAnalysis, analyzeRollback, getDeployments, getService, listPreviewEnvs, lockService, unlockService } from '../api/client'
 import { Spinner } from '../components/Spinner'
 import { useAuth } from '../contexts/AuthContext'
-import type { Deployment, PreviewEnvironment, RollbackNavigationState, Service } from '../types'
+import type { Deployment, PreviewEnvironment, RollbackNavigationState, Service, ServiceLock } from '../types'
 
 const IDENTITY_KEY = 'dcp_identity'
 
@@ -73,6 +73,12 @@ export function ServiceDetailPage() {
     }
   }, [authUser])
 
+  // Lock state
+  const [lock, setLock] = useState<ServiceLock | null | undefined>(undefined)
+  const [lockReason, setLockReason] = useState('')
+  const [lockLoading, setLockLoading] = useState(false)
+  const [lockError, setLockError] = useState<string | null>(null)
+
   // AI analysis state
   const [analysis, setAnalysis] = useState<RollbackAnalysis | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
@@ -93,12 +99,44 @@ export function ServiceDetailPage() {
     Promise.all([getService(id), getDeployments(id, environment), listPreviewEnvs(id)])
       .then(([svcRes, depRes, previewRes]) => {
         setService(svcRes.service)
+        setLock(svcRes.service.lock ?? null)
         setDeployments(depRes.deployments)
         setPreviews(previewRes.previews)
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false))
   }, [id, environment])
+
+  const lockActor = authUser?.login ?? authUser?.name ?? (identity.name || 'unknown')
+
+  async function handleLock() {
+    if (!service || !lockReason.trim()) return
+    setLockLoading(true)
+    setLockError(null)
+    try {
+      const res = await lockService(service.id, lockActor, lockReason.trim())
+      setLock(res.lock)
+      setLockReason('')
+    } catch (e) {
+      setLockError(e instanceof Error ? e.message : 'Failed to lock service')
+    } finally {
+      setLockLoading(false)
+    }
+  }
+
+  async function handleUnlock() {
+    if (!service) return
+    setLockLoading(true)
+    setLockError(null)
+    try {
+      await unlockService(service.id, lockActor)
+      setLock(null)
+    } catch (e) {
+      setLockError(e instanceof Error ? e.message : 'Failed to unlock service')
+    } finally {
+      setLockLoading(false)
+    }
+  }
 
   function handleSelectDeploy(dep: Deployment) {
     if (!service) return
@@ -282,6 +320,66 @@ export function ServiceDetailPage() {
         </div>
       </div>
 
+      {/* Deployment Lock banner */}
+      <div className={`rounded-lg border shadow-sm ${lock ? 'border-orange-300 bg-orange-50' : 'border-gray-200 bg-white'}`}>
+        <div className="px-5 py-4">
+          {lock ? (
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl leading-none mt-0.5">🔒</span>
+                  <div>
+                    <p className="font-semibold text-orange-900 text-sm">
+                      Service locked by <span className="font-bold">{lock.lockedBy}</span>
+                    </p>
+                    <p className="text-sm text-orange-700 mt-0.5">"{lock.reason}"</p>
+                    <p className="text-xs text-orange-400 mt-1">{formatDate(lock.lockedAt)}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleUnlock}
+                  disabled={lockLoading}
+                  className="shrink-0 text-xs font-medium px-3 py-1.5 rounded border border-orange-300 text-orange-700 hover:bg-orange-100 disabled:opacity-50 transition-colors"
+                >
+                  {lockLoading ? 'Unlocking…' : 'Unlock'}
+                </button>
+              </div>
+              {lockError && (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                  {lockError}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-700 mb-1">Lock this service</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={lockReason}
+                    onChange={(e) => setLockReason(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleLock()}
+                    placeholder="Reason (e.g. active incident, freeze window)"
+                    className="flex-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                  />
+                  <button
+                    onClick={handleLock}
+                    disabled={lockLoading || !lockReason.trim()}
+                    className="shrink-0 text-xs font-medium px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:border-orange-400 hover:text-orange-700 disabled:opacity-40 transition-colors"
+                  >
+                    {lockLoading ? 'Locking…' : '🔒 Lock'}
+                  </button>
+                </div>
+              </div>
+              {lockError && (
+                <p className="text-xs text-red-600">{lockError}</p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Deployment history */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -424,7 +522,14 @@ export function ServiceDetailPage() {
 
       {/* Rollback form — appears when a deploy is selected */}
       {selectedDeploy && (
-        <div ref={formRef} className="bg-white rounded-lg border-2 border-blue-200 shadow-sm">
+        <div ref={formRef} className={`bg-white rounded-lg border-2 shadow-sm relative ${lock ? 'border-orange-200 opacity-60 pointer-events-none' : 'border-blue-200'}`}>
+          {lock && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-orange-50/80">
+              <p className="text-sm font-semibold text-orange-800">
+                🔒 Rollbacks are blocked — service is locked
+              </p>
+            </div>
+          )}
           <div className="px-5 py-4 border-b border-blue-100 bg-blue-50 rounded-t-lg">
             <h2 className="font-semibold text-blue-900">
               Roll back {service.name} to{' '}
@@ -512,6 +617,7 @@ export function ServiceDetailPage() {
           </form>
         </div>
       )}
+
     </div>
   )
 }

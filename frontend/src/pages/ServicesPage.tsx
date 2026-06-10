@@ -4,6 +4,15 @@ import { getServices } from '../api/client'
 import { Spinner } from '../components/Spinner'
 import type { Service } from '../types'
 
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
+
 export function ServicesPage() {
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
@@ -51,20 +60,39 @@ export function ServicesPage() {
 function ServiceCard({ service }: { service: Service }) {
   const tier = service.tags['tier']
   const team = service.tags['team']
+  const locked = !!service.lock
 
   return (
     <Link
       to={`/services/${service.id}`}
-      className="block bg-white rounded-lg border border-gray-200 shadow-sm p-5 hover:border-blue-300 hover:shadow-md transition-all"
+      className={`block bg-white rounded-lg border shadow-sm p-5 hover:shadow-md transition-all ${
+        locked
+          ? 'border-orange-300 hover:border-orange-400'
+          : 'border-gray-200 hover:border-blue-300'
+      }`}
     >
       <div className="flex items-start justify-between gap-2 mb-3">
         <h2 className="font-semibold text-gray-900 leading-tight">{service.name}</h2>
-        {tier === 'critical' && (
-          <span className="flex-shrink-0 text-xs font-semibold px-2 py-0.5 rounded bg-red-100 text-red-700 border border-red-200">
-            critical
-          </span>
-        )}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {locked && (
+            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200 flex items-center gap-1">
+              🔒 locked
+            </span>
+          )}
+          {tier === 'critical' && (
+            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-red-100 text-red-700 border border-red-200">
+              critical
+            </span>
+          )}
+        </div>
       </div>
+
+      {locked && service.lock && (
+        <div className="mb-3 text-xs text-orange-700 bg-orange-50 border border-orange-100 rounded px-2 py-1.5">
+          <span className="font-medium">{service.lock.lockedBy}</span>: {service.lock.reason}
+          <span className="text-orange-400 ml-1">· {timeAgo(service.lock.lockedAt)}</span>
+        </div>
+      )}
 
       <div className="space-y-1.5 text-sm text-gray-500">
         <div className="flex items-center gap-1.5">

@@ -9,6 +9,14 @@ export type ActionStatus =
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
 
+export interface ServiceLock {
+  id: string
+  serviceId: string
+  lockedBy: string
+  reason: string
+  lockedAt: string
+}
+
 export interface Service {
   id: string
   name: string
@@ -19,6 +27,7 @@ export interface Service {
   onCall?: string
   runbookUrl?: string
   tags: Record<string, string>
+  lock?: ServiceLock | null
 }
 
 export interface Deployment {
