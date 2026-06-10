@@ -46,14 +46,14 @@ export async function locksRoutes(
 
     const lock = locks.lock(req.params.id, parsed.data.lockedBy, parsed.data.reason);
 
-    await auditStore.log({
-      actionId: lock.id,
-      actionType: 'deploy',
-      serviceId: req.params.id,
-      actor: parsed.data.lockedBy,
-      event: 'service.locked',
-      detail: { reason: parsed.data.reason, serviceId: req.params.id },
-    });
+    auditStore.log(
+      lock.id,
+      'deploy',
+      req.params.id,
+      parsed.data.lockedBy,
+      'service.locked',
+      { reason: parsed.data.reason, serviceId: req.params.id },
+    );
 
     return reply.code(201).send({ lock });
   });
@@ -75,14 +75,14 @@ export async function locksRoutes(
 
     locks.unlock(req.params.id);
 
-    await auditStore.log({
-      actionId: existing.id,
-      actionType: 'deploy',
-      serviceId: req.params.id,
-      actor: parsed.data.unlockedBy,
-      event: 'service.unlocked',
-      detail: { serviceId: req.params.id, previousLockedBy: existing.lockedBy },
-    });
+    auditStore.log(
+      existing.id,
+      'deploy',
+      req.params.id,
+      parsed.data.unlockedBy,
+      'service.unlocked',
+      { serviceId: req.params.id, previousLockedBy: existing.lockedBy },
+    );
 
     return reply.send({ message: `${svc.name} unlocked by ${parsed.data.unlockedBy}` });
   });
