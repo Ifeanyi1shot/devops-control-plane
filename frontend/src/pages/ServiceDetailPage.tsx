@@ -76,6 +76,8 @@ export function ServiceDetailPage() {
   // Lock state
   const [lock, setLock] = useState<ServiceLock | null | undefined>(undefined)
   const [lockReason, setLockReason] = useState('')
+  const [lockTargetEnv, setLockTargetEnv] = useState<string>('')
+  const [lockTargetBranch, setLockTargetBranch] = useState('')
   const [lockLoading, setLockLoading] = useState(false)
   const [lockError, setLockError] = useState<string | null>(null)
 
@@ -114,9 +116,17 @@ export function ServiceDetailPage() {
     setLockLoading(true)
     setLockError(null)
     try {
-      const res = await lockService(service.id, lockActor, lockReason.trim())
+      const res = await lockService(
+        service.id,
+        lockActor,
+        lockReason.trim(),
+        lockTargetEnv || null,
+        lockTargetBranch.trim() || null,
+      )
       setLock(res.lock)
       setLockReason('')
+      setLockTargetEnv('')
+      setLockTargetBranch('')
     } catch (e) {
       setLockError(e instanceof Error ? e.message : 'Failed to lock service')
     } finally {
@@ -331,6 +341,16 @@ export function ServiceDetailPage() {
                   <div>
                     <p className="font-semibold text-orange-900 text-sm">
                       Service locked by <span className="font-bold">{lock.lockedBy}</span>
+                      {lock.targetEnvironment && (
+                        <span className="ml-2 text-xs font-normal px-1.5 py-0.5 rounded bg-orange-200 text-orange-800">
+                          {lock.targetEnvironment} only
+                        </span>
+                      )}
+                      {lock.targetBranch && (
+                        <span className="ml-1 text-xs font-normal px-1.5 py-0.5 rounded bg-orange-200 text-orange-800 font-mono">
+                          {lock.targetBranch}
+                        </span>
+                      )}
                     </p>
                     <p className="text-sm text-orange-700 mt-0.5">"{lock.reason}"</p>
                     <p className="text-xs text-orange-400 mt-1">{formatDate(lock.lockedAt)}</p>
@@ -351,26 +371,42 @@ export function ServiceDetailPage() {
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-3">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700 mb-1">Lock this service</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={lockReason}
-                    onChange={(e) => setLockReason(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleLock()}
-                    placeholder="Reason (e.g. active incident, freeze window)"
-                    className="flex-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
-                  />
-                  <button
-                    onClick={handleLock}
-                    disabled={lockLoading || !lockReason.trim()}
-                    className="shrink-0 text-xs font-medium px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:border-orange-400 hover:text-orange-700 disabled:opacity-40 transition-colors"
-                  >
-                    {lockLoading ? 'Locking…' : '🔒 Lock'}
-                  </button>
-                </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-gray-700">Lock this service</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={lockReason}
+                  onChange={(e) => setLockReason(e.target.value)}
+                  placeholder="Reason (e.g. active incident, freeze window)"
+                  className="flex-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                />
+              </div>
+              <div className="flex gap-2 items-center">
+                <select
+                  value={lockTargetEnv}
+                  onChange={(e) => setLockTargetEnv(e.target.value)}
+                  className="border border-gray-300 rounded-md px-2 py-1.5 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                >
+                  <option value="">All environments</option>
+                  <option value="production">production only</option>
+                  <option value="staging">staging only</option>
+                  <option value="development">development only</option>
+                </select>
+                <input
+                  type="text"
+                  value={lockTargetBranch}
+                  onChange={(e) => setLockTargetBranch(e.target.value)}
+                  placeholder="Branch (optional, e.g. main)"
+                  className="flex-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                />
+                <button
+                  onClick={handleLock}
+                  disabled={lockLoading || !lockReason.trim()}
+                  className="shrink-0 text-xs font-medium px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:border-orange-400 hover:text-orange-700 disabled:opacity-40 transition-colors"
+                >
+                  {lockLoading ? 'Locking…' : '🔒 Lock'}
+                </button>
               </div>
               {lockError && (
                 <p className="text-xs text-red-600">{lockError}</p>

@@ -7,6 +7,8 @@ import { getService } from '../../services/registry';
 const lockBody = z.object({
   lockedBy: z.string().min(1),
   reason: z.string().min(1),
+  targetEnvironment: z.string().optional().nullable(),
+  targetBranch: z.string().optional().nullable(),
 });
 
 const unlockBody = z.object({
@@ -44,7 +46,13 @@ export async function locksRoutes(
       return reply.code(400).send({ error: 'Invalid request', details: parsed.error.flatten() });
     }
 
-    const lock = locks.lock(req.params.id, parsed.data.lockedBy, parsed.data.reason);
+    const lock = locks.lock(
+      req.params.id,
+      parsed.data.lockedBy,
+      parsed.data.reason,
+      parsed.data.targetEnvironment ?? null,
+      parsed.data.targetBranch ?? null,
+    );
 
     auditStore.log(
       lock.id,

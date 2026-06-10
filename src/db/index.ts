@@ -73,13 +73,24 @@ export function createDatabase() {
     CREATE INDEX IF NOT EXISTS idx_preview_service_id ON preview_environments(service_id);
 
     CREATE TABLE IF NOT EXISTS service_locks (
-      id         TEXT PRIMARY KEY,
-      service_id TEXT NOT NULL UNIQUE,
-      locked_by  TEXT NOT NULL,
-      reason     TEXT NOT NULL,
-      locked_at  TEXT NOT NULL
+      id                 TEXT PRIMARY KEY,
+      service_id         TEXT NOT NULL UNIQUE,
+      locked_by          TEXT NOT NULL,
+      reason             TEXT NOT NULL,
+      locked_at          TEXT NOT NULL,
+      target_environment TEXT,
+      target_branch      TEXT
     );
   `);
+
+  // Migrate existing service_locks table: add columns added after initial schema
+  const lockCols = (db.pragma('table_info(service_locks)') as Array<{ name: string }>).map((c) => c.name);
+  if (!lockCols.includes('target_environment')) {
+    db.exec('ALTER TABLE service_locks ADD COLUMN target_environment TEXT');
+  }
+  if (!lockCols.includes('target_branch')) {
+    db.exec('ALTER TABLE service_locks ADD COLUMN target_branch TEXT');
+  }
 
   console.log(`[DB] SQLite database ready at ${dbPath}`);
 

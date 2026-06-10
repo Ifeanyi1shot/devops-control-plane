@@ -23,11 +23,13 @@ export async function lockService(
   serviceId: string,
   lockedBy: string,
   reason: string,
+  targetEnvironment?: string | null,
+  targetBranch?: string | null,
 ): Promise<{ lock: ServiceLock }> {
   return request(`/services/${serviceId}/lock`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lockedBy, reason }),
+    body: JSON.stringify({ lockedBy, reason, targetEnvironment, targetBranch }),
   })
 }
 

@@ -32,8 +32,8 @@ export async function rollbackRoutes(
       return reply.code(400).send({ error: 'Invalid request', details: parsed.error.flatten() });
     }
 
-    // Check deployment lock before anything else
-    const lock = locks.findByServiceId(parsed.data.serviceId);
+    // Check deployment lock before anything else — scoped by environment
+    const lock = locks.findApplicable(parsed.data.serviceId, parsed.data.environment);
     if (lock) {
       return reply.code(423).send({
         error: `Service is locked by ${lock.lockedBy}: "${lock.reason}"`,

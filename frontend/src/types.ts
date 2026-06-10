@@ -15,6 +15,8 @@ export interface ServiceLock {
   lockedBy: string
   reason: string
   lockedAt: string
+  targetEnvironment: string | null
+  targetBranch: string | null
 }
 
 export interface Service {
