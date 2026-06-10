@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { type RollbackAnalysis, analyzeRollback, getDeployments, getService, listPreviewEnvs } from '../api/client'
 import { Spinner } from '../components/Spinner'
+import { useAuth } from '../contexts/AuthContext'
 import type { Deployment, PreviewEnvironment, RollbackNavigationState, Service } from '../types'
 
 const IDENTITY_KEY = 'dcp_identity'
@@ -59,8 +60,18 @@ export function ServiceDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const { user: authUser } = useAuth()
   const [identity, setIdentity] = useState<Identity>(loadIdentity)
   const [environment, setEnvironment] = useState('production')
+
+  // Sync identity from GitHub auth when user logs in
+  useEffect(() => {
+    if (authUser) {
+      const next = { name: authUser.name, role: authUser.role }
+      setIdentity(next)
+      saveIdentity(next)
+    }
+  }, [authUser])
 
   // AI analysis state
   const [analysis, setAnalysis] = useState<RollbackAnalysis | null>(null)
@@ -216,33 +227,58 @@ export function ServiceDetailPage() {
           <h2 className="font-semibold text-gray-700 mb-3 text-sm uppercase tracking-wide">
             Acting as
           </h2>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Your name</label>
-              <input
-                type="text"
-                value={identity.name}
-                onChange={(e) => handleIdentityChange('name', e.target.value)}
-                placeholder="e.g. Jane Smith"
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          {authUser ? (
+            <div className="flex items-center gap-3">
+              <img
+                src={authUser.avatarUrl}
+                alt={authUser.name}
+                className="w-10 h-10 rounded-full border border-gray-200"
               />
+              <div>
+                <p className="text-sm font-medium text-gray-900">{authUser.name}</p>
+                <p className="text-xs text-gray-400">
+                  @{authUser.login} · <span className="font-medium text-gray-600">{authUser.role}</span>
+                </p>
+              </div>
+              <span className="ml-auto text-xs text-green-600 bg-green-50 border border-green-200 rounded px-2 py-0.5">
+                GitHub verified
+              </span>
             </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Role</label>
-              <select
-                value={identity.role}
-                onChange={(e) => handleIdentityChange('role', e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Your name</label>
+                <input
+                  type="text"
+                  value={identity.name}
+                  onChange={(e) => handleIdentityChange('name', e.target.value)}
+                  placeholder="e.g. Jane Smith"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Role</label>
+                <select
+                  value={identity.role}
+                  onChange={(e) => handleIdentityChange('role', e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="engineer">Engineer</option>
+                  <option value="senior-engineer">Senior Engineer</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <a
+                href="/auth/github"
+                className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 transition-colors"
               >
-                <option value="engineer">Engineer</option>
-                <option value="senior-engineer">Senior Engineer</option>
-                <option value="admin">Admin</option>
-              </select>
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                </svg>
+                Login with GitHub for verified identity
+              </a>
             </div>
-          </div>
-          <p className="mt-3 text-xs text-gray-400">
-            Auth is not wired up yet — this simulates your identity for policy checks.
-          </p>
+          )}
         </div>
       </div>
 

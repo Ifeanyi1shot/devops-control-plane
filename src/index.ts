@@ -17,6 +17,7 @@ import { RollbackService } from './services/rollback/service';
 import { PreviewEnvService } from './services/preview/service';
 import { registry } from './services/registry';
 
+import { authRoutes } from './api/routes/auth';
 import { analyzeRoutes } from './api/routes/analyze';
 import { servicesRoutes } from './api/routes/services';
 import { rollbackRoutes } from './api/routes/rollback';
@@ -26,6 +27,12 @@ import { slackRoutes } from './api/routes/slack';
 import { previewEnvRoutes } from './api/routes/preview';
 
 const ANTHROPIC_API_KEY = process.env['ANTHROPIC_API_KEY'] ?? '';
+const GITHUB_CLIENT_ID = process.env['GITHUB_CLIENT_ID'] ?? '';
+const GITHUB_CLIENT_SECRET = process.env['GITHUB_CLIENT_SECRET'] ?? '';
+const GITHUB_CALLBACK_URL = process.env['GITHUB_CALLBACK_URL'] ?? 'http://localhost:3002/auth/github/callback';
+const APP_URL = process.env['APP_URL'] ?? 'http://localhost:5173';
+const JWT_SECRET = process.env['JWT_SECRET'] ?? 'change-me-in-production';
+const ADMIN_GITHUB_LOGINS = (process.env['ADMIN_GITHUB_LOGINS'] ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const PORT = parseInt(process.env['PORT'] ?? '3002', 10);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
 const GITHUB_TOKEN = process.env['GITHUB_TOKEN'] ?? '';
@@ -85,6 +92,16 @@ async function bootstrap() {
 
   // Health check (outside /api so load balancers can reach it)
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+
+  // Auth routes (outside /api — GitHub redirects back here)
+  await authRoutes(app, {
+    clientId: GITHUB_CLIENT_ID,
+    clientSecret: GITHUB_CLIENT_SECRET,
+    callbackUrl: GITHUB_CALLBACK_URL,
+    jwtSecret: JWT_SECRET,
+    appUrl: APP_URL,
+    adminLogins: ADMIN_GITHUB_LOGINS,
+  });
 
   // Slack interactions webhook (outside /api — URL is set in Slack app settings)
   await slackRoutes(app, slack, orchestrator);

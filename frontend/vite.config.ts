@@ -10,6 +10,10 @@ export default defineConfig({
         target: 'http://localhost:3002',
         changeOrigin: true,
       },
+      '/auth/github': {
+        target: 'http://localhost:3002',
+        changeOrigin: true,
+      },
       '/slack': {
         target: 'http://localhost:3002',
         changeOrigin: true,

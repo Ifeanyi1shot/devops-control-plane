@@ -1,6 +1,6 @@
 # DevOps Control Plane
 
-An AI-native internal developer platform for safely executing operational tasks — rollbacks, preview environments, and service management — with policy enforcement, Slack approval workflows, and a full audit trail.
+An AI-native internal developer platform for safely executing operational tasks — rollbacks, preview environments, and service management — with policy enforcement, Slack approval workflows, GitHub OAuth, and a full audit trail.
 
 Built for engineering teams that want engineers to move fast without bypassing safety controls.
 
@@ -15,19 +15,36 @@ Production breaks at 2am. An engineer needs to roll back to the last known-good 
 
 This control plane replaces that entire flow with a single web interface:
 
-1. Engineer selects a service and picks a commit from deployment history
-2. The system shows exactly what will change, the risk level, and what the policy says
-3. If the engineer's role requires it, a Slack message fires to the approver
-4. The approver clicks **Approve** in Slack — the rollback executes automatically
-5. Everything is logged in the audit trail
+1. Engineer logs in with GitHub — identity is verified, role is assigned automatically
+2. Engineer selects a service and picks a commit from the real deployment history
+3. The **AI Rollback Assistant** analyzes the diff and returns a risk level, plain-English summary, affected areas, and a post-rollback verification checklist
+4. If the engineer's role requires it, a Slack message fires to the approver
+5. The approver clicks **Approve** in Slack — the rollback executes automatically
+6. Everything is logged in the audit trail
 
 ---
 
 ## Features
 
+### GitHub OAuth
+- Login with GitHub — no separate account creation needed
+- JWT sessions (7-day expiry) stored in localStorage
+- Role assignment from GitHub login: admins defined via `ADMIN_GITHUB_LOGINS` env var, everyone else gets `engineer`
+- "Acting as" section auto-fills from the authenticated user with a **GitHub verified** badge
+- NavBar shows avatar, display name, role, and a Sign out button
+
+### AI Rollback Assistant (powered by Claude)
+- When a commit is selected, an AI panel appears before the rollback form
+- Claude analyzes the git diff (file patches + commit messages) between the current deploy and the rollback target
+- Returns: risk level (low / medium / high / critical), plain-English summary, list of affected areas, and a step-by-step verification checklist
+- Powered by `claude-haiku` for fast, low-cost analysis on every rollback decision
+- Gracefully disabled when `ANTHROPIC_API_KEY` is not set
+
 ### Rollback Workflow
 - View real deployment history pulled from GitHub Actions / GitHub Deployments API
-- Commit diff with file-level change analysis and risk scoring
+- Three-tier fallback: Deployments API → workflow runs → branch commits
+- Author avatars, clickable SHA links to GitHub, branch/ref labels, and source indicators on every row
+- Click any row to select it as a rollback target
 - Policy-gated execution: deny / self-service / requires-approval based on role + environment + time
 - Weekend freeze policy blocks production changes on Saturdays and Sundays
 - Kubernetes dry-run mode for safe testing without a live cluster
@@ -49,12 +66,20 @@ This control plane replaces that entire flow with a single web interface:
 ### Policy Engine
 - YAML-based rules with first-match-wins evaluation
 - Supports: role matching, environment matching, time restrictions (deny days, deny after hour)
+- Timezone-aware — set `POLICY_TIMEZONE` to enforce time windows in your local timezone
 - Built-in rules: production weekend freeze, engineer requires approval, senior engineer self-service, staging open, preview environments open
 
-### Audit Trail
+### Audit Log UI
+- Dedicated `/audit` page in the web UI
+- Color-coded event badges (completed, approved, executing, failed, rejected, etc.)
+- Filter by service, live polling toggle (updates every 5 seconds), expandable JSON detail rows
 - Every action logged: previewed, approved, rejected, executing, completed, failed
 - Persisted to SQLite — survives server restarts
-- Queryable by action ID, service ID, or global feed
+
+### Config-Driven Service Registry
+- Services defined in `services.yaml` at the project root — no code changes needed to add a service
+- Override the file path with `SERVICES_FILE` env var
+- Supports all service fields: id, name, repo, namespace, deployment, owner, onCall, runbookUrl, tags
 
 ### Persistent Storage
 - SQLite database (`data/control-plane.db`)
@@ -69,16 +94,17 @@ This control plane replaces that entire flow with a single web interface:
 ┌─────────────────────────────────────────────────────────┐
 │                    React Frontend                        │
 │  ServicesPage → ServiceDetailPage → RollbackPreviewPage  │
-│                     PreviewEnvsPage                      │
+│  PreviewEnvsPage → AuditLogPage → AuthCallbackPage       │
 └────────────────────────┬────────────────────────────────┘
-                         │ /api/* (Vite proxy)
+                         │ /api/* (Vite proxy in dev)
 ┌────────────────────────▼────────────────────────────────┐
 │                  Fastify Backend (TypeScript)            │
 │                                                         │
 │  PolicyEngine → ActionOrchestrator → AuditStore         │
 │                                                         │
 │  Integrations:                                          │
-│    GitHub   — deployment history, commit diffs          │
+│    GitHub   — OAuth, deployment history, commit diffs   │
+│    Anthropic — AI rollback analysis (Claude Haiku)      │
 │    Kubernetes — rollback execution (dry-run supported)  │
 │    Slack    — Block Kit approvals, signature verify     │
 │                                                         │
@@ -99,11 +125,13 @@ This control plane replaces that entire flow with a single web interface:
 | Backend | Node.js, Fastify, TypeScript |
 | Frontend | React, TypeScript, Tailwind CSS, Vite |
 | Database | SQLite (better-sqlite3) |
+| AI | Anthropic SDK (Claude Haiku) |
+| Auth | GitHub OAuth + JWT (jsonwebtoken) |
 | GitHub integration | Octokit REST |
 | Kubernetes integration | @kubernetes/client-node |
 | Slack integration | @slack/web-api |
 | Policy | YAML rules engine (custom) |
-| Dev tooling | ts-node, nodemon, ESLint |
+| Dev tooling | ts-node, nodemon |
 
 ---
 
@@ -113,8 +141,9 @@ This control plane replaces that entire flow with a single web interface:
 
 - Node.js 18+
 - A GitHub personal access token (fine-grained, read access to your repos)
+- A GitHub OAuth app (for login)
+- An Anthropic API key (for AI rollback analysis — optional)
 - A Slack app with `chat:write` scope and Interactivity enabled (optional)
-- ngrok or similar for Slack callback tunneling (optional)
 
 ### Installation
 
@@ -127,11 +156,11 @@ cd frontend && npm install && cd ..
 
 ### Configuration
 
-Copy the example env file and fill in your credentials:
-
 ```bash
 cp .env.example .env
 ```
+
+Key variables:
 
 ```env
 PORT=3002
@@ -140,14 +169,39 @@ HOST=0.0.0.0
 # GitHub — fine-grained token with read access to your repos
 GITHUB_TOKEN=github_pat_...
 
+# GitHub OAuth — create an app at github.com/settings/developers
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+GITHUB_CALLBACK_URL=http://localhost:3002/auth/github/callback
+APP_URL=http://localhost:5173
+
+# JWT — sign auth sessions (change in production)
+JWT_SECRET=your-secret-here
+
+# Admins — GitHub logins that get the admin role (comma-separated)
+ADMIN_GITHUB_LOGINS=your-github-username
+
+# Anthropic — enables AI rollback analysis (optional)
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Policy timezone (defaults to UTC)
+POLICY_TIMEZONE=Africa/Lagos
+
 # Set to true when no real Kubernetes cluster is available
 K8S_DRY_RUN=true
 
-# Slack — required for approval notifications
+# Slack — required for approval notifications (optional)
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_SIGNING_SECRET=...
 SLACK_APPROVAL_CHANNEL="#your-channel"
 ```
+
+### GitHub OAuth App Setup
+
+1. Go to [github.com/settings/developers](https://github.com/settings/developers)
+2. Click **New OAuth App**
+3. Set **Authorization callback URL** to `http://localhost:3002/auth/github/callback`
+4. Copy Client ID and Client Secret into `.env`
 
 ### Running
 
@@ -162,6 +216,29 @@ cd frontend && npm run dev
 ```
 
 Open `http://localhost:5173`
+
+---
+
+## Service Registry
+
+Services are defined in `services.yaml` at the project root:
+
+```yaml
+services:
+  - id: my-service
+    name: My Service
+    repo: my-org/my-service
+    namespace: production
+    deployment: my-service
+    owner: platform-team
+    onCall: platform-oncall
+    runbookUrl: https://wiki.internal/runbooks/my-service
+    tags:
+      team: platform
+      tier: critical
+```
+
+Restart the backend after editing — no code changes needed.
 
 ---
 
@@ -215,7 +292,6 @@ For local development, use [ngrok](https://ngrok.com) to expose port 3002:
 ```bash
 ngrok http 3002
 ```
-Use the ngrok URL as the Interactivity Request URL in your Slack app settings.
 
 ---
 
@@ -224,34 +300,60 @@ Use the ngrok URL as the Interactivity Request URL in your Slack app settings.
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/health` | Health check |
-| GET | `/services` | List all services |
-| GET | `/services/:id` | Get service details |
-| GET | `/services/:id/deployments` | Deployment history |
-| POST | `/rollback/preview` | Preview a rollback (policy check + diff) |
-| POST | `/rollback/:id/execute` | Execute an approved rollback |
-| POST | `/actions/:id/approve` | Approve a pending action |
-| POST | `/actions/:id/reject` | Reject a pending action |
-| GET | `/actions` | List all actions |
-| POST | `/preview-env` | Create a preview environment |
-| GET | `/preview-env` | List active preview environments |
-| GET | `/preview-env/:id` | Get a single preview environment |
-| DELETE | `/preview-env/:id` | Destroy a preview environment |
-| GET | `/audit` | Global audit log |
-| GET | `/audit/actions/:id` | Audit log for a specific action |
-| GET | `/audit/services/:id` | Audit log for a specific service |
+| GET | `/auth/github` | Initiate GitHub OAuth login |
+| GET | `/auth/github/callback` | OAuth callback — issues JWT |
+| GET | `/auth/me` | Get current authenticated user |
+| GET | `/api/services` | List all services |
+| GET | `/api/services/:id` | Get service details |
+| GET | `/api/services/:id/deployments` | Deployment history from GitHub |
+| POST | `/api/rollback/preview` | Preview a rollback (policy check + diff) |
+| POST | `/api/rollback/:id/execute` | Execute an approved rollback |
+| POST | `/api/analyze` | AI rollback analysis (Claude) |
+| POST | `/api/actions/:id/approve` | Approve a pending action |
+| POST | `/api/actions/:id/reject` | Reject a pending action |
+| GET | `/api/actions` | List all actions |
+| POST | `/api/preview-env` | Create a preview environment |
+| GET | `/api/preview-env` | List active preview environments |
+| GET | `/api/preview-env/:id` | Get a single preview environment |
+| DELETE | `/api/preview-env/:id` | Destroy a preview environment |
+| GET | `/api/audit` | Global audit log |
+| GET | `/api/audit/actions/:id` | Audit log for a specific action |
+| GET | `/api/audit/services/:id` | Audit log for a specific service |
 | POST | `/slack/interactions` | Slack interactive payload handler |
+
+---
+
+## Docker
+
+```bash
+docker build -t devops-control-plane .
+docker run -p 3002:3002 \
+  -e GITHUB_TOKEN=... \
+  -e GITHUB_CLIENT_ID=... \
+  -e GITHUB_CLIENT_SECRET=... \
+  -e JWT_SECRET=... \
+  -e ANTHROPIC_API_KEY=... \
+  -v $(pwd)/data:/app/data \
+  devops-control-plane
+```
 
 ---
 
 ## Project Status
 
-This is an MVP demonstrating the core workflows. Production-grade additions would include:
-
-- [ ] Authentication (GitHub OAuth or SSO)
+- [x] GitHub OAuth login with role assignment
+- [x] AI-powered rollback analysis (Claude)
+- [x] Real GitHub deployment history with avatars and commit links
+- [x] Audit log UI with live polling and service filtering
+- [x] Config-driven service registry (services.yaml)
+- [x] Policy engine with timezone support
+- [x] Slack approval workflow
+- [x] Preview environments
+- [x] SQLite persistence
+- [x] Docker support
 - [ ] Real Kubernetes cluster integration
-- [ ] More services in the registry (config-file driven)
-- [ ] Deployment to a hosted server (Docker + Fly.io / Railway)
-- [ ] Metrics and alerting integration
+- [ ] Policy editor UI
+- [ ] Service health / DORA metrics dashboard
 - [ ] PR-based preview environment creation
 
 ---
