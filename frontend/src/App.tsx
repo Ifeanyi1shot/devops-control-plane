@@ -4,6 +4,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import { AuditLogPage } from './pages/AuditLogPage'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
 import { MetricsDashboard } from './pages/MetricsDashboard'
+import { PolicyEditorPage } from './pages/PolicyEditorPage'
 import { PreviewEnvsPage } from './pages/PreviewEnvsPage'
 import { RollbackPreviewPage } from './pages/RollbackPreviewPage'
 import { ServiceDetailPage } from './pages/ServiceDetailPage'
@@ -23,6 +24,7 @@ export function App() {
             <Route path="/audit" element={<AuditLogPage />} />
             <Route path="/auth/callback" element={<AuthCallbackPage />} />
             <Route path="/metrics" element={<MetricsDashboard />} />
+            <Route path="/policy" element={<PolicyEditorPage />} />
           </Routes>
         </div>
       </BrowserRouter>

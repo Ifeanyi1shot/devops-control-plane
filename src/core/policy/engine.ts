@@ -64,9 +64,16 @@ function checkTimeRestriction(rule: PolicyRule): { denied: boolean; reason: stri
 
 export class PolicyEngine {
   private rules: PolicyRule[] = [];
+  private policyDir: string = '';
 
   constructor(policyDir: string) {
+    this.policyDir = policyDir;
     this.loadPolicies(policyDir);
+  }
+
+  reload(): void {
+    this.rules = [];
+    this.loadPolicies(this.policyDir);
   }
 
   private loadPolicies(dir: string): void {

@@ -1,4 +1,4 @@
-import type { Action, Deployment, PolicyDecision, PreviewEnvironment, Service, ServiceLock } from '../types'
+import type { Action, Deployment, PolicyDecision, PolicyFile, PreviewEnvironment, Service, ServiceLock } from '../types'
 
 const BASE = '/api'
 
@@ -210,4 +210,48 @@ export interface MetricsData {
 
 export async function getMetrics(): Promise<MetricsData> {
   return request('/metrics')
+}
+
+export interface PolicyFileInfo {
+  filename: string
+  version: string
+  ruleCount: number
+  error?: string
+}
+
+export async function getPolicyFiles(): Promise<{ files: PolicyFileInfo[] }> {
+  return request('/policy/files')
+}
+
+export async function getPolicyFile(filename: string): Promise<{ policy: PolicyFile }> {
+  return request(`/policy/${encodeURIComponent(filename)}`)
+}
+
+export async function savePolicyFile(filename: string, policy: PolicyFile): Promise<{ message: string }> {
+  return request(`/policy/${encodeURIComponent(filename)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(policy),
+  })
+}
+
+export async function deletePolicyFile(filename: string): Promise<{ message: string }> {
+  return request(`/policy/${encodeURIComponent(filename)}`, { method: 'DELETE' })
+}
+
+export interface SimulatePolicyRequest {
+  type: 'rollback' | 'deploy' | 'restart' | 'scale' | 'preview_env'
+  serviceId: string
+  requestedBy: string
+  requestedByRole: string
+  environment: string
+  params: Record<string, unknown>
+}
+
+export async function simulatePolicy(payload: SimulatePolicyRequest): Promise<{ decision: PolicyDecision; request: SimulatePolicyRequest }> {
+  return request('/policy/simulate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
 }

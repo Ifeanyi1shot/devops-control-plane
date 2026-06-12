@@ -5,6 +5,7 @@ const NAV_LINKS = [
   { to: '/', label: 'Services', exact: true },
   { to: '/audit', label: 'Audit Log', exact: false },
   { to: '/metrics', label: 'Metrics', exact: false },
+  { to: '/policy', label: 'Policy', exact: false },
 ]
 
 export function NavBar() {

@@ -27,6 +27,7 @@ import { actionsRoutes } from './api/routes/actions';
 import { auditRoutes } from './api/routes/audit';
 import { slackRoutes } from './api/routes/slack';
 import { previewEnvRoutes } from './api/routes/preview';
+import { policyRoutes } from './api/routes/policy';
 
 const ANTHROPIC_API_KEY = process.env['ANTHROPIC_API_KEY'] ?? '';
 const GITHUB_CLIENT_ID = process.env['GITHUB_CLIENT_ID'] ?? '';
@@ -118,6 +119,7 @@ async function bootstrap() {
     await actionsRoutes(api, orchestrator);
     await auditRoutes(api, auditStore);
     await previewEnvRoutes(api, previewEnvService);
+    await policyRoutes(api, POLICY_DIR, policy);
   }, { prefix: '/api' });
 
   // SPA fallback — serve index.html for all unmatched routes in production

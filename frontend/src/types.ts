@@ -106,6 +106,29 @@ export interface PreviewEnvironment {
   error?: string
 }
 
+export interface PolicyRule {
+  name: string
+  description: string
+  match: {
+    actionType: string | string[]
+    environment?: string | string[]
+    role?: string | string[]
+  }
+  allow: boolean
+  requireApproval?: boolean
+  approverRole?: string
+  timeRestriction?: {
+    denyDays?: string[]
+    denyAfterHour?: number
+    denyBeforeHour?: number
+  }
+}
+
+export interface PolicyFile {
+  version: string
+  rules: PolicyRule[]
+}
+
 export interface RollbackNavigationState {
   serviceId: string
   serviceName: string
