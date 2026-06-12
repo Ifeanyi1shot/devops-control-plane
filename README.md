@@ -195,7 +195,7 @@ GITHUB_TOKEN=github_pat_...
 GITHUB_CLIENT_ID=...
 GITHUB_CLIENT_SECRET=...
 GITHUB_CALLBACK_URL=http://localhost:3002/auth/github/callback
-APP_URL=http://localhost:5173
+APP_URL=http://localhost:5180
 
 # JWT — sign auth sessions (change in production)
 JWT_SECRET=your-secret-here
@@ -237,7 +237,7 @@ Start the frontend (separate terminal):
 cd frontend && npm run dev
 ```
 
-Open `http://localhost:5173`
+Open `http://localhost:5180`
 
 ---
 
